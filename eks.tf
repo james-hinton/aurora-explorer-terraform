@@ -1,98 +1,47 @@
-resource "aws_eks_cluster" "aurora_cluster" {
-  name     = "aurora-cluster"
-  role_arn = aws_iam_role.eks_cluster_role.arn
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.5.3"
 
-  vpc_config {
-    subnet_ids = [aws_subnet.subnet_1.id, aws_subnet.subnet_2.id]
-  }
+  name = "aurora-vpc"
+  cidr = "10.0.0.0/16"
 
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy_attachment,
-  ]
-}
+  azs             = ["eu-west-2a", "eu-west-2b"]
+  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
+  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
 
-resource "aws_iam_role" "eks_cluster_role" {
-  name = "eks_cluster_role"
+  enable_nat_gateway = true
+  single_nat_gateway = true
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "eks.amazonaws.com"
-        }
-        Action = "sts:AssumeRole"
-      },
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "eks_cluster_policy_attachment" {
-  role       = aws_iam_role.eks_cluster_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-}
-
-resource "aws_eks_node_group" "aurora_node_group" {
-  cluster_name    = aws_eks_cluster.aurora_cluster.name
-  node_group_name = "aurora-node-group"
-  node_role_arn   = aws_iam_role.eks_worker_role.arn
-  subnet_ids      = [aws_subnet.subnet_1.id, aws_subnet.subnet_2.id]
-
-  instance_types = ["t3.medium"]
-  capacity_type = "SPOT"
-
-  scaling_config {
-    desired_size = 1
-    max_size     = 1
-    min_size     = 1
+  tags = {
+    "kubernetes.io/cluster/aurora-cluster" = "shared"
   }
 }
-resource "aws_iam_role" "eks_worker_role" {
-  name = "eks_worker_role"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-        Action = "sts:AssumeRole"
-      },
-    ]
-  })
-}
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "19.15.3"
 
-resource "aws_iam_role_policy_attachment" "eks_worker_policy_attachment" {
-  role       = aws_iam_role.eks_worker_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-}
+  cluster_name    = "aurora-cluster"
+  cluster_version = "1.27"
 
-resource "aws_iam_role_policy_attachment" "eks_cni_policy_attachment" {
-  role       = aws_iam_role.eks_worker_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-}
+  vpc_id                         = module.vpc.vpc_id
+  subnet_ids                     = module.vpc.private_subnets
+  cluster_endpoint_public_access = true
 
-resource "aws_iam_role_policy_attachment" "eks_ec2_policy_attachment" {
-  role       = aws_iam_role.eks_worker_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-}
+  eks_managed_node_group_defaults = {
+    ami_type = "AL2_x86_64"
 
+  }
 
-resource "aws_vpc" "aurora_vpc" {
-  cidr_block = "10.0.0.0/16"
-}
+  eks_managed_node_groups = {
+    one = {
+      name = "aurora-node-group-1"
 
-resource "aws_subnet" "subnet_1" {
-  vpc_id     = aws_vpc.aurora_vpc.id
-  cidr_block = "10.0.1.0/24"
-  availability_zone = "eu-west-2a"
-}
+      instance_types = ["t3.small"]
 
-resource "aws_subnet" "subnet_2" {
-  vpc_id     = aws_vpc.aurora_vpc.id
-  cidr_block = "10.0.2.0/24"
-  availability_zone = "eu-west-2b"
+      min_size     = 1
+      max_size     = 3
+      desired_size = 2
+    }
+  }
 }
