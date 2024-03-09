@@ -40,8 +40,65 @@ module "eks" {
       instance_types = ["t3.small"]
 
       min_size     = 1
-      max_size     = 3
-      desired_size = 2
+      max_size     = 1
+      desired_size = 1
     }
   }
+}
+
+data "aws_iam_openid_connect_provider" "eks_oidc_provider" {
+  arn = module.eks.oidc_provider_arn
+}
+
+
+resource "aws_iam_policy" "k8s_s3_access_policy" {
+  name   = "k8s_s3_access_policy"
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "${aws_s3_bucket.aurora_data.arn}/*",
+        "${aws_s3_bucket.aurora_data.arn}"
+      ]
+    }
+  ]
+}
+POLICY
+}
+
+
+resource "aws_iam_role" "k8s_s3_access_role" {
+  name = "k8s_s3_access_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Federated = module.eks.oidc_provider_arn
+        },
+        Action = "sts:AssumeRoleWithWebIdentity",
+        Condition = {
+          StringEquals = {
+            "${data.aws_iam_openid_connect_provider.eks_oidc_provider.url}:sub" = "system:serviceaccount:default:aurora-s3-access"
+          }
+        }
+      }
+    ]
+  })
+}
+
+
+resource "aws_iam_role_policy_attachment" "k8s_s3_access_policy_attachment" {
+  role       = aws_iam_role.k8s_s3_access_role.name
+  policy_arn = aws_iam_policy.k8s_s3_access_policy.arn
 }
