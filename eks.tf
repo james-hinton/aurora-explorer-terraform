@@ -22,7 +22,7 @@ module "eks" {
   version = "19.15.3"
 
   cluster_name    = "aurora-cluster"
-  cluster_version = "1.27"
+  cluster_version = "1.28"
 
   vpc_id                         = module.vpc.vpc_id
   subnet_ids                     = module.vpc.private_subnets
@@ -31,7 +31,6 @@ module "eks" {
 
   eks_managed_node_group_defaults = {
     ami_type = "AL2_x86_64"
-
   }
 
   eks_managed_node_groups = {
@@ -52,6 +51,7 @@ data "aws_iam_openid_connect_provider" "eks_oidc_provider" {
 }
 
 
+# S3 Access
 resource "aws_iam_policy" "k8s_s3_access_policy" {
   name   = "k8s_s3_access_policy"
   policy = <<POLICY
@@ -75,7 +75,6 @@ resource "aws_iam_policy" "k8s_s3_access_policy" {
 POLICY
 }
 
-
 resource "aws_iam_role" "k8s_s3_access_role" {
   name = "k8s_s3_access_role"
 
@@ -97,8 +96,6 @@ resource "aws_iam_role" "k8s_s3_access_role" {
     ]
   })
 }
-
-
 resource "aws_iam_role_policy_attachment" "k8s_s3_access_policy_attachment" {
   role       = aws_iam_role.k8s_s3_access_role.name
   policy_arn = aws_iam_policy.k8s_s3_access_policy.arn

@@ -103,9 +103,14 @@ resource "aws_lambda_function" "k8_job_trigger" {
 
   role = aws_iam_role.lambda_execution_role.arn
   timeout = 60
-  
-  # Important note that this assumes the k8-job-trigger.zip file is located there.
+
   source_code_hash = filebase64sha256("${path.module}/../aurora-explorer-lambda-functions/k8_job_trigger/k8-job-trigger.zip")
+
+  environment {
+    variables = {
+      K8S_API_ENDPOINT = module.eks.cluster_endpoint
+    }
+  }
 }
 
 
