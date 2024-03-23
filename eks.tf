@@ -37,7 +37,7 @@ module "eks" {
     one = {
       name = "aurora-node-group-1"
 
-      instance_types = ["t3.small"]
+      instance_types = ["t3.large"] # I can't afford this at the moment lol.
 
       min_size     = 1
       max_size     = 1
